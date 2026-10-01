@@ -28,7 +28,7 @@ function DeskRow({ desk, data }) {
         <span className={`text-xs font-semibold ${data.occupied ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-slate-500"}`}>
           {data.occupied ? "Occ" : "Empty"}
         </span>
-        <span className="text-xs font-mono text-slate-400 dark:text-slate-500">{(data.confidence * 100).toFixed(0)}%</span>
+        <span className="text-xs font-mono text-slate-400 dark:text-slate-500">{((data.confidence ?? 0) * 100).toFixed(0)}%</span>
       </div>
     </div>
   );
@@ -137,6 +137,10 @@ export default function App() {
     localStorage.setItem("cape-dark-mode", String(darkMode));
   }, [darkMode]);
 
+  useEffect(() => {
+    return () => revokeAllBlobUrls();
+  }, []);
+
   const revokeAllBlobUrls = useCallback(() => {
     blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     blobUrlsRef.current.clear();
@@ -181,7 +185,7 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function runBatch() {
+  const runBatch = useCallback(async () => {
     if (!files.length) return;
     setRunning(true);
     setResults([]);
@@ -196,7 +200,7 @@ export default function App() {
     }
 
     setRunning(false);
-  }
+  }, [files.length]);
 
   async function processFile(i) {
     const file = files[i];

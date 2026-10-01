@@ -1,3 +1,5 @@
+import { useState, useCallback, useEffect, useRef } from "react";
+
 const API_URL = import.meta.env.VITE_API_URL || "/stats";
 
 const PERSON_OPTIONS = [
@@ -16,7 +18,9 @@ const _DESK_LABELS = {
 };
 
 function formatDate(dateStr) {
+  if (!dateStr) return '';
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
   return date.toLocaleDateString("id-ID", {
     weekday: "long",
     year: "numeric",
@@ -134,6 +138,7 @@ export default function StatsDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const abortControllerRef = useRef(null);
 
   const fetchStats = useCallback(async () => {
     if (selectedPerson === "all") return;
@@ -142,17 +147,23 @@ export default function StatsDashboard() {
     setError(null);
     setStats(null);
 
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+
     try {
-      const res = await fetch(`${API_URL}/${selectedPerson}?date=${selectedDate}`);
+      const res = await fetch(`${API_URL}/${selectedPerson}?date=${selectedDate}`, { signal: abortControllerRef.current.signal });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Error ${res.status}`);
       }
       const data = await res.json();
+      if (abortControllerRef.current.signal.aborted) return;
       setStats(data);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       setError(err.message || "Failed to fetch stats");
     } finally {
+      if (abortControllerRef.current.signal.aborted) return;
       setLoading(false);
     }
   }, [selectedPerson, selectedDate]);
@@ -226,7 +237,7 @@ export default function StatsDashboard() {
               <div>
                 <p className="text-lg font-semibold text-slate-800 capitalize">{stats.person}</p>
                 <p className="text-sm text-slate-500 mt-0.5">
-                  Jam kerja: {stats.work_hours.start} - {stats.work_hours.end}
+                  Jam kerja: {stats.work_hours?.start ?? '-'} - {stats.work_hours?.end ?? '-'}
                 </p>
               </div>
               <StatusBadge present={tingkatKehadiran?.value === true} />
