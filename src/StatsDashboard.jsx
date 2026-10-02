@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "/stats";
+const STATS_URL = import.meta.env.VITE_STATS_URL || "/stats";
 
 const PERSON_OPTIONS = [
   { value: "all", label: "All People" },
@@ -151,7 +151,7 @@ export default function StatsDashboard() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const res = await fetch(`${API_URL}/${selectedPerson}?date=${selectedDate}`, { signal: abortControllerRef.current.signal });
+      const res = await fetch(`${STATS_URL}/${selectedPerson}?date=${selectedDate}`, { signal: abortControllerRef.current.signal });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Error ${res.status}`);
