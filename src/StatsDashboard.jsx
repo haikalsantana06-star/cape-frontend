@@ -267,7 +267,7 @@ export default function StatsDashboard() {
               }
               label="Lama Bekerja"
               value={formatMinutesToHours(lamaBekerja?.value)}
-              unit={`Target: ${formatMinutesToHours(stats.work_hours.total_minutes)}`}
+              unit={`Target: ${formatMinutesToHours(stats.work_hours?.total_minutes ?? 0)}`}
               colorClass="bg-emerald-100"
             />
 
