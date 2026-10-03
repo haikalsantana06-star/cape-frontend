@@ -136,6 +136,42 @@ function EmptyState({ message }) {
 
 // ── Simple Bar Chart (pure CSS/SVG, no lib) ──────────────────────────────────
 
+const STATUS_COLORS = {
+  present:  "bg-emerald-400",
+  absent:   "bg-amber-400",
+  no_data:  "bg-slate-200",
+};
+
+function transformTrendToChartData(trendPoints, periodType, isComparison) {
+  if (!trendPoints || trendPoints.length === 0) return [];
+
+  if (isComparison) {
+    // Group by date: one bar per date, color = most-common presence that day
+    const byDate = {};
+    for (const tp of trendPoints) {
+      if (!byDate[tp.date]) byDate[tp.date] = { label: tp.date.slice(5), points: [] };
+      byDate[tp.date].points.push(tp);
+    }
+    return Object.values(byDate).map(({ label, points }) => {
+      const present = points.filter(p => p.presence_status === "present").length;
+      const absent  = points.filter(p => p.presence_status === "absent").length;
+      const status  = present >= absent ? "present" : "absent";
+      return {
+        label,
+        value: points.reduce((s, p) => s + (p.productive_minutes || 0), 0),
+        color: STATUS_COLORS[status] || STATUS_COLORS.no_data,
+      };
+    });
+  }
+
+  // Single-person trend: one bar per date
+  return trendPoints.map((tp) => ({
+    label: tp.date.slice(5),
+    value: tp.productive_minutes || 0,
+    color: STATUS_COLORS[tp.presence_status] || STATUS_COLORS.no_data,
+  }));
+}
+
 function SimpleBarChart({ data }) {
   if (!data || data.length === 0) {
     return <p className="text-sm text-slate-400 text-center py-8">Tidak ada data tren</p>;
@@ -352,15 +388,26 @@ export default function StatsDashboard() {
         // ── Individual person ───────────────────────────────────────────
         else if (periodType === "daily") {
           try {
-            const [daily, trend] = await Promise.all([
-              fetchDailyStats(person, periodValue),
-              fetchTrendSeries("daily", periodValue, person),
-            ]);
-            setData({ type: "daily", stats: daily, trend, person, date: periodValue });
+            const daily = await fetchDailyStats(person, periodValue);
+            setData({ type: "daily", stats: daily, trend: [], person, date: periodValue });
           } catch {
             // Fallback to legacy endpoint
-            const stats = await fetchLegacyStats(person, periodValue);
-            setData({ type: "daily", stats, trend: [], person, date: periodValue });
+            const legacy = await fetchLegacyStats(person, periodValue);
+            const indicators = legacy?.indicators || {};
+            const hadir = indicators["tingkat_kehadiran"]?.value === true;
+            const mapped = {
+              person: legacy.person,
+              date: legacy.date,
+              has_data: true,
+              presence_status: hadir ? "present" : "absent",
+              first_seen: indicators["ketepatan_datang"]?.value || null,
+              last_seen: null,
+              work_minutes: indicators["lama_bekerja"]?.value || 0,
+              productive_minutes: indicators["waktu_produktif"]?.value || 0,
+              idle_minutes: indicators["waktu_tidak_produktif"]?.value || 0,
+              work_hours: legacy.work_hours,
+            };
+            setData({ type: "daily", stats: mapped, trend: [], person, date: periodValue });
           }
         } else {
           const [aggregate, trend] = await Promise.all([
@@ -455,7 +502,7 @@ export default function StatsDashboard() {
         {data?.type === "comparison" && data.trend?.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h3 className="text-sm font-medium text-slate-700 mb-4">Tren Kehadiran</h3>
-            <SimpleBarChart data={data.trend} />
+            <SimpleBarChart data={transformTrendToChartData(data.trend, periodType, true)} />
           </div>
         )}
 
@@ -470,7 +517,7 @@ export default function StatsDashboard() {
   // ── Individual person view ─────────────────────────────────────────────
   const stats = data?.stats;
   const trend = data?.trend || [];
-  const status = stats?.status || "no_data";
+  const status = stats?.presence_status || "no_data";
 
   return (
     <div className="space-y-6">
@@ -560,7 +607,7 @@ export default function StatsDashboard() {
           <KPICard
             icon={<svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
             label="Tingkat Kehadiran"
-            value={stats?.present_days != null ? `${stats.present_days}/${stats.total_days ?? "?"} (${stats.attendance_rate ?? 0}%)` : "—"}
+            value={stats?.days_present != null ? `${stats.days_present}/${stats.total_days ?? "?"} (${Math.round((stats.attendance_rate ?? 0) * 100)}%)` : "—"}
             colorClass="bg-purple-100"
           />
           <KPICard
@@ -579,7 +626,7 @@ export default function StatsDashboard() {
             icon={<svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
             label="Ketepatan Datang"
             value={formatTime(stats?.avg_arrival_time)}
-            subValue={stats?.on_time_days != null ? `${stats.on_time_days}/${stats.total_days ?? "?"} (${stats.on_time_rate ?? 0}%)` : ""}
+            subValue={stats?.on_time_count != null ? `${stats.on_time_count}/${stats.days_present ?? "?"} (${Math.round((stats.on_time_rate ?? 0) * 100)}%)` : ""}
             colorClass="bg-blue-100"
           />
           <KPICard
@@ -597,7 +644,7 @@ export default function StatsDashboard() {
           <h3 className="text-sm font-medium text-slate-700 mb-4">
             Tren {filters.periodType === "weekly" ? "Mingguan" : "Harian"}
           </h3>
-          <SimpleBarChart data={trend} />
+          <SimpleBarChart data={transformTrendToChartData(trend, filters.periodType, false)} />
         </div>
       )}
     </div>
