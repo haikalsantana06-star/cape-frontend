@@ -137,9 +137,7 @@ export default function App() {
     localStorage.setItem("cape-dark-mode", String(darkMode));
   }, [darkMode]);
 
-  useEffect(() => {
-    return () => revokeAllBlobUrls();
-  }, []);
+  // NOTE: cleanup effect removed - component stays mounted when switching tabs
 
   const revokeAllBlobUrls = useCallback(() => {
     blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));

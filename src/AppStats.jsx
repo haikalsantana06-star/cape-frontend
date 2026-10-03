@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import App from "./App";
 import StatsDashboard from "./StatsDashboard";
 
@@ -36,10 +36,14 @@ export default function AppStats() {
         </div>
       </div>
 
-      {/* Tab Content */}
+      {/* Tab Content - keep mounted to preserve state */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {activeTab === "detection" && <App />}
-        {activeTab === "stats" && <StatsDashboard />}
+        <div className={activeTab === "detection" ? "block" : "hidden"}>
+          <App />
+        </div>
+        <div className={activeTab === "stats" ? "block" : "hidden"}>
+          <StatsDashboard />
+        </div>
       </div>
     </div>
   );
